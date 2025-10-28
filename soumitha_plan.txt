@@ -1,0 +1,30 @@
+Generated on: 2025-10-27
+
+Week 1 (Total hrs: 8.6)
+ - Arrays: 1D Arrays [Medium] - 1.9 hrs
+ - Arrays: 2D Arrays [Medium] - 1.9 hrs
+ - Linked List: Singly Linked List [Hard] - 3.0 hrs
+ - Linked List: Doubly Linked List [Medium] - 1.9 hrs
+
+Week 2 (Total hrs: 9.8)
+ - Stacks: Implementation and Operations [Hard] - 3.0 hrs
+ - Queues: Simple Queue [Medium] - 1.9 hrs
+ - Queues: Circular Queue [Medium] - 1.9 hrs
+ - Trees: Binary Tree [Hard] - 3.0 hrs
+
+Week 3 (Total hrs: 9.0)
+ - Trees: Binary Search Tree [Hard] - 3.0 hrs
+ - Graphs: Representation and Traversal [Hard] - 3.0 hrs
+ - Sorting Algorithms: Bubble Sort [Easy] - 1.1 hrs
+ - Sorting Algorithms: Quick Sort [Medium] - 1.9 hrs
+
+Week 4 (Total hrs: 9.8)
+ - Sorting Algorithms: Merge Sort [Medium] - 1.9 hrs
+ - Hashing: Hash Tables [Medium] - 1.9 hrs
+ - Dynamic Programming: Basics [Hard] - 3.0 hrs
+ - Recursion: Concepts and Examples [Hard] - 3.0 hrs
+
+Week 5 (Total hrs: 6.0)
+ - Searching: Linear Search [Easy] - 1.1 hrs
+ - Searching: Binary Search [Medium] - 1.9 hrs
+ - Advanced Topics: Graph Algorithms [Hard] - 3.0 hrs
