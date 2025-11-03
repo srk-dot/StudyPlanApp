@@ -1,0 +1,35 @@
+=== Study Plan ===
+Generated: 2025-11-02
+
+Week 1:
+  - Arrays: 1D Arrays [Medium] (1 hr 53 mins)
+  - Arrays: 2D Arrays [Medium] (1 hr 53 mins)
+  - Linked List: Singly Linked List [Hard] (3 hrs 0 mins)
+  - Linked List: Doubly Linked List [Medium] (1 hr 53 mins)
+  - Stacks: Implementation and Operations [Hard] (3 hrs 0 mins)
+  Total: 11 hrs 38 mins
+
+Week 2:
+  - Queues: Simple Queue [Medium] (1 hr 53 mins)
+  - Queues: Circular Queue [Medium] (1 hr 53 mins)
+  - Trees: Binary Tree [Hard] (3 hrs 0 mins)
+  - Trees: Binary Search Tree [Hard] (3 hrs 0 mins)
+  - Graphs: Representation and Traversal [Hard] (3 hrs 0 mins)
+  Total: 12 hrs 45 mins
+
+Week 3:
+  - Sorting Algorithms: Bubble Sort [Easy] (1 hr 8 mins)
+  - Sorting Algorithms: Quick Sort [Medium] (1 hr 53 mins)
+  - Sorting Algorithms: Merge Sort [Medium] (1 hr 53 mins)
+  - Hashing: Hash Tables [Medium] (1 hr 53 mins)
+  - Dynamic Programming: Basics [Hard] (3 hrs 0 mins)
+  Total: 9 hrs 45 mins
+
+Week 4:
+  - Recursion: Concepts and Examples [Hard] (3 hrs 0 mins)
+  - Searching: Linear Search [Easy] (1 hr 8 mins)
+  - Searching: Binary Search [Medium] (1 hr 53 mins)
+  - Advanced Topics: Graph Algorithms [Hard] (3 hrs 0 mins)
+  Total: 9 hrs 0 mins
+
+========================

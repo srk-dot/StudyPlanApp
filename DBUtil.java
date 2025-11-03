@@ -10,7 +10,7 @@ public class DBUtil {
             Class.forName("com.mysql.cj.jdbc.Driver");
             return DriverManager.getConnection(URL, USER, PASS);
         } catch (Exception e) {
-            System.out.println("? Connection failed: " + e.getMessage());
+            System.out.println("Connection failed: " + e.getMessage());
             return null;
         }
     }
