@@ -108,11 +108,12 @@ public class StudyPlanApp {
 
         Subtopic(String t, String p) { topic = t; priority = p; }
 
-        @Override
-        public String toString() {
-            return topic + " [" + (priority == null ? "Medium" : priority) + "]"
-                    + (completed ? " ✅" : "");
-        }
+ @Override
+public String toString() {
+    return topic + " [" + (priority == null ? "Medium" : priority) + "]"
+           + (completed ? " (Done)" : "");
+}
+
     }
 
     static class Entry implements Serializable {
@@ -326,7 +327,7 @@ public class StudyPlanApp {
             p.generatedDate = LocalDate.now();
             return p;
         }
-
+    
         // =====================================================
 // ============ SMART REBALANCING FEATURE (UPDATED) =====
 // =====================================================
