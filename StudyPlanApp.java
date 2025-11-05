@@ -623,6 +623,12 @@ progressPanel.add(bottomProgress, BorderLayout.SOUTH);
                 return;
             }
             String cap = (String) capBox.getSelectedItem();
+                // ✅ Decrease total weeks by 1 before regenerating
+    int newWeeks = Math.max(1, u.lastPlan.weeks.size() - 1);
+
+    // ✅ Generate new plan with (n - 1) weeks
+    u.lastPlan = StudyPlanGenerator.gen(u.syllabus, newWeeks, cap);
+
             StudyPlanGenerator.rebalancePlan(u, cap);
             buildProgressUI(u, weeksContainer, totalProgressBar);
             msg(f, "Plan rebalanced! Incomplete topics redistributed across weeks.");
@@ -642,47 +648,71 @@ progressPanel.add(bottomProgress, BorderLayout.SOUTH);
     }
 
     // ====================== HELPER METHODS ======================
-
-    static void buildProgressUI(User u, JPanel container, JProgressBar totalProgressBar) {
-        container.removeAll();
-        if (u.lastPlan == null) {
-            container.add(new JLabel("No study plan generated yet."));
-            container.revalidate();
-            container.repaint();
-            return;
-        }
-
-        int total = 0, done = 0;
-        for (int w = 0; w < u.lastPlan.weeks.size(); w++) {
-            Week wk = u.lastPlan.weeks.get(w);
-            JPanel wp = new JPanel();
-            wp.setLayout(new BoxLayout(wp, BoxLayout.Y_AXIS));
-            wp.setBorder(BorderFactory.createTitledBorder("Week " + (w + 1)));
-            wp.setBackground(Color.white);
-
-            for (Entry e : wk.entries) {
-                String formattedTime = ViewGUI.formatHours(e.hours);
-                JCheckBox cb = new JCheckBox(e.topic + " (" + e.priority + ", " + formattedTime + ")");
-                Subtopic s = findSubtopicByTopic(u, e.topic);
-                if (s != null) cb.setSelected(s.completed);
-                cb.addActionListener(ev -> {
-                    if (s != null) s.completed = cb.isSelected();
-                    buildProgressUI(u, container, totalProgressBar);
-                });
-                wp.add(cb);
-                total++;
-                if (s != null && s.completed) done++;
-            }
-            container.add(Box.createRigidArea(new Dimension(0, 10)));
-            container.add(wp);
-        }
-
-        int percent = total == 0 ? 0 : (done * 100 / total);
-        totalProgressBar.setValue(percent);
-        totalProgressBar.setString(percent + "% Complete");
+static void buildProgressUI(User u, JPanel container, JProgressBar totalProgressBar) {
+    container.removeAll();
+    if (u.lastPlan == null) {
+        container.add(new JLabel("No study plan generated yet."));
         container.revalidate();
         container.repaint();
+        return;
     }
+
+    int total = 0, done = 0;
+    boolean prevWeeksComplete = true; // ✅ Used to lock future weeks
+
+    for (int w = 0; w < u.lastPlan.weeks.size(); w++) {
+        Week wk = u.lastPlan.weeks.get(w);
+        JPanel wp = new JPanel();
+        wp.setLayout(new BoxLayout(wp, BoxLayout.Y_AXIS));
+        wp.setBorder(BorderFactory.createTitledBorder("Week " + (w + 1)));
+        wp.setBackground(Color.white);
+
+        boolean weekComplete = true;
+
+        // ✅ Sequential restriction within each week
+        boolean previousTaskComplete = true;
+
+        for (Entry e : wk.entries) {
+            String formattedTime = ViewGUI.formatHours(e.hours);
+            JCheckBox cb = new JCheckBox(e.topic + " (" + e.priority + ", " + formattedTime + ")");
+            Subtopic s = findSubtopicByTopic(u, e.topic);
+            if (s != null) cb.setSelected(s.completed);
+
+            // ✅ Enable only if previous weeks are complete and previous tasks in week are complete
+            cb.setEnabled(prevWeeksComplete && previousTaskComplete);
+
+            cb.addActionListener(ev -> {
+                if (s != null) s.completed = cb.isSelected();
+                buildProgressUI(u, container, totalProgressBar);
+            });
+
+            wp.add(cb);
+            total++;
+
+            if (s != null && s.completed) {
+                done++;
+            } else {
+                previousTaskComplete = false;
+                weekComplete = false;
+            }
+        }
+
+        // ✅ Lock future weeks until this week is fully complete
+        if (!weekComplete) prevWeeksComplete = false;
+
+        container.add(Box.createRigidArea(new Dimension(0, 10)));
+        container.add(wp);
+    }
+
+    int percent = total == 0 ? 0 : (done * 100 / total);
+    totalProgressBar.setValue(percent);
+    totalProgressBar.setString(percent + "% Complete");
+
+    container.revalidate();
+    container.repaint();
+}
+
+
 
     static Subtopic findSubtopicByTopic(User u, String topic) {
         for (Subtopic s : u.syllabus) {
