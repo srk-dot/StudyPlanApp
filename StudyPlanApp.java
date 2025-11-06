@@ -327,64 +327,84 @@ public String toString() {
             p.generatedDate = LocalDate.now();
             return p;
         }
-    
-        // =====================================================
-// ============ SMART REBALANCING FEATURE (UPDATED) =====
+       // =====================================================
+// ============ SMART REBALANCING (WEEK SHRINK LOGIC) ==
 // =====================================================
 static void rebalancePlan(User user, String capacity) {
     if (user.lastPlan == null) return;
 
     List<Week> weeks = user.lastPlan.weeks;
-    int totalWeeks = weeks.size();
+    if (weeks.isEmpty()) return;
 
-    // Step 1: collect incomplete topics from earlier weeks
     List<Entry> carryOver = new ArrayList<>();
 
-    for (int i = 0; i < totalWeeks; i++) {
-        Week wk = weeks.get(i);
-        List<Entry> remaining = new ArrayList<>();
+    // Step 1: Collect only incomplete topics; skip completed weeks
+    List<Week> newWeeks = new ArrayList<>();
+
+    for (Week wk : weeks) {
+        boolean allCompleted = true;
+        List<Entry> incompleteEntries = new ArrayList<>();
+
         for (Entry e : wk.entries) {
-            // inline findSubtopicByTopic to avoid cross-class resolution issues
             Subtopic s = null;
             for (Subtopic ss : user.syllabus) {
-                if (ss.topic.equalsIgnoreCase(e.topic)) { s = ss; break; }
+                if (ss.topic.equalsIgnoreCase(e.topic)) {
+                    s = ss;
+                    break;
+                }
             }
+
+            // If topic incomplete, keep it
             if (s == null || !s.completed) {
-                remaining.add(e);
+                incompleteEntries.add(e);
+                allCompleted = false;
             }
         }
 
-        // remove all items from this week; we'll reassign completed ones back
-        wk.entries.clear();
-
-        // keep only completed topics in current week, carry others
-        for (Entry e : remaining) {
-            Subtopic s = null;
-            for (Subtopic ss : user.syllabus) {
-                if (ss.topic.equalsIgnoreCase(e.topic)) { s = ss; break; }
-            }
-            if (s != null && s.completed) {
-                wk.entries.add(e);
-            } else {
-                carryOver.add(e);
-            }
+        // If week not fully completed, we keep its incomplete topics
+        if (!allCompleted) {
+            Week newWk = new Week();
+            newWk.entries = incompleteEntries;
+            newWeeks.add(newWk);
         }
     }
 
-    // Step 2: redistribute remaining topics into upcoming weeks
-    int weekIndex = 0;
-    for (Entry e : carryOver) {
-        while (weekIndex < totalWeeks && weeks.get(weekIndex).entries.size() >= 6) {
-            weekIndex++; // skip full weeks
-        }
-        if (weekIndex >= totalWeeks) weekIndex = totalWeeks - 1; // stay within total
-        weeks.get(weekIndex).entries.add(e);
+    // Step 2: Flatten and redistribute across (new) n-#weeks remaining
+    List<Entry> allIncomplete = new ArrayList<>();
+    for (Week wk : newWeeks) {
+        allIncomplete.addAll(wk.entries);
     }
-    // UI rebuild is handled by caller (DashboardGUI)
-}
-}
 
-  // =====================================================
+    int newTotalWeeks = newWeeks.size();
+    if (newTotalWeeks == 0 && !allIncomplete.isEmpty()) newTotalWeeks = 1;
+
+    // Reset week list
+    weeks.clear();
+
+    if (!allIncomplete.isEmpty()) {
+        int total = allIncomplete.size();
+        int perWeek = total / newTotalWeeks;
+        int remainder = total % newTotalWeeks;
+
+        int index = 0;
+        for (int i = 0; i < newTotalWeeks; i++) {
+            Week newWk = new Week();
+            int count = perWeek + (i < remainder ? 1 : 0);
+            for (int j = 0; j < count && index < total; j++) {
+                newWk.entries.add(allIncomplete.get(index++));
+            }
+            weeks.add(newWk);
+        }
+    }
+
+    // Show confirmation
+    JOptionPane.showMessageDialog(null,
+        "Plan rebalanced! Completed weeks removed, incomplete topics shifted forward.",
+        "Message",
+        JOptionPane.INFORMATION_MESSAGE);
+}
+    }
+// =====================================================
 // ================= DASHBOARD GUI =====================
 // =====================================================
 
@@ -444,7 +464,6 @@ static class DashboardGUI {
         JPanel editPanel = styledPanel(panelBg);
         editPanel.setLayout(new BorderLayout());
 
-        // List of topics
         DefaultListModel<Subtopic> listModel = new DefaultListModel<>();
         for (Subtopic s : u.syllabus) listModel.addElement(s);
 
@@ -456,13 +475,11 @@ static class DashboardGUI {
         listScroll.setPreferredSize(new Dimension(320, 520));
         listScroll.setBorder(new CompoundBorder(new LineBorder(Color.GRAY), new EmptyBorder(5, 5, 5, 5)));
 
-        // Right panel (form + buttons)
         JPanel right = new JPanel(new BorderLayout());
         right.setBorder(new EmptyBorder(10, 10, 10, 10));
 
         JPanel form = new JPanel();
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
-
         JLabel topicLbl = new JLabel("Topic:");
         JTextField topicField = new JTextField();
         topicField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
@@ -482,7 +499,6 @@ static class DashboardGUI {
         form.add(prBox);
         right.add(form, BorderLayout.NORTH);
 
-        // ---- Buttons ----
         JPanel btnPanel = new JPanel();
         JButton selectBtn = new JButton("Select");
         JButton addBtn = new JButton("Add");
@@ -508,97 +524,158 @@ static class DashboardGUI {
         editPanel.add(listScroll, BorderLayout.WEST);
         editPanel.add(right, BorderLayout.CENTER);
 
-        // ---- Button Logic ----
-        selectBtn.addActionListener(e -> {
-            int idx = syllabusList.getSelectedIndex();
-            if (idx >= 0) {
-                Subtopic s = u.syllabus.get(idx);
-                topicField.setText(s.topic);
-                prBox.setSelectedItem(s.priority);
-            }
-        });
-
-        addBtn.addActionListener(e -> {
-            String topic = topicField.getText().trim();
-            if (topic.isEmpty()) {
-                msg(f, "Please enter a topic name!");
-                return;
-            }
-            String priority = (String) prBox.getSelectedItem();
-            Subtopic s = new Subtopic(topic, priority);
-            u.syllabus.add(s);
-            listModel.addElement(s);
-            topicField.setText("");
-            msg(f, "Topic added successfully!");
-        });
-
-        delBtn.addActionListener(e -> {
-            int idx = syllabusList.getSelectedIndex();
-            if (idx >= 0) {
-                int confirm = JOptionPane.showConfirmDialog(f, "Delete this topic?", "Confirm", JOptionPane.YES_NO_OPTION);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    u.syllabus.remove(idx);
-                    listModel.remove(idx);
-                    topicField.setText("");
-                    msg(f, "Topic deleted.");
-                }
-            }
-        });
-
-        updateBtn.addActionListener(e -> {
-            int idx = syllabusList.getSelectedIndex();
-            if (idx >= 0) {
-                Subtopic s = u.syllabus.get(idx);
-                s.topic = topicField.getText().trim();
-                s.priority = (String) prBox.getSelectedItem();
-                listModel.set(idx, s);
-                msg(f, "Topic updated successfully!");
-            }
-        });
-
         // ---- Progress Tracker Tab ----
         JPanel progressPanel = styledPanel(panelBg);
         progressPanel.setLayout(new BorderLayout());
-
         JPanel weeksContainer = new JPanel();
         weeksContainer.setLayout(new BoxLayout(weeksContainer, BoxLayout.Y_AXIS));
         JScrollPane progressScroll = new JScrollPane(weeksContainer);
         progressScroll.setBorder(new EmptyBorder(10, 10, 10, 10));
 
+        JButton rebalanceBtn = new JButton("Rebalance Plan");
+        rebalanceBtn.setBackground(new Color(100, 150, 200));
+        rebalanceBtn.setForeground(Color.white);
+
         JPanel bottomProgress = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-bottomProgress.setBackground(panelBg);
+        bottomProgress.setBackground(panelBg);
+        bottomProgress.add(rebalanceBtn);
 
-JButton rebalanceBtn = new JButton("Rebalance Plan");
-rebalanceBtn.setBackground(new Color(100, 150, 200));
-rebalanceBtn.setForeground(Color.white);
+        progressPanel.add(progressScroll, BorderLayout.CENTER);
+        progressPanel.add(bottomProgress, BorderLayout.SOUTH);
 
-JProgressBar totalProgressBar = new JProgressBar();
-totalProgressBar.setStringPainted(true);
-totalProgressBar.setPreferredSize(new Dimension(300, 25));
+        // ---- Statistics Dashboard Tab ----
+        JPanel statsPanel = styledPanel(panelBg);
+        statsPanel.setLayout(new BorderLayout());
 
-bottomProgress.add(new JLabel("Overall Progress:"));
-bottomProgress.add(totalProgressBar);
-bottomProgress.add(rebalanceBtn);
+        JLabel statsTitle = new JLabel("Study Statistics Dashboard", JLabel.CENTER);
+        statsTitle.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        statsTitle.setBorder(new EmptyBorder(10, 0, 10, 0));
+        statsPanel.add(statsTitle, BorderLayout.NORTH);
 
-progressPanel.add(progressScroll, BorderLayout.CENTER);
-progressPanel.add(bottomProgress, BorderLayout.SOUTH);
+        JPanel centerStats = new JPanel(new GridLayout(1, 2, 20, 0));
+        centerStats.setBackground(panelBg);
 
+        JPanel piePanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                if (u.syllabus.isEmpty()) return;
 
+                int total = u.syllabus.size();
+                long done = u.syllabus.stream().filter(s -> s.completed).count();
+                long remaining = total - done;
+
+                int startAngle = 0;
+                int doneAngle = (int) Math.round((done * 360.0) / total);
+                int remAngle = 360 - doneAngle;
+
+                int size = Math.min(getWidth(), getHeight()) - 100;
+                int x = (getWidth() - size) / 2;
+                int y = (getHeight() - size) / 2;
+
+                g.setColor(new Color(100, 200, 100));
+                g.fillArc(x, y, size, size, startAngle, doneAngle);
+                g.setColor(new Color(200, 100, 100));
+                g.fillArc(x, y, size, size, startAngle + doneAngle, remAngle);
+
+                g.setColor(Color.BLACK);
+                g.setFont(new Font("Segoe UI", Font.BOLD, 14));
+                g.drawString("Completed", x + 20, y + size + 25);
+                g.drawString("Remaining", x + size - 100, y + size + 25);
+            }
+        };
+        piePanel.setBackground(Color.WHITE);
+
+        JPanel summaryPanel = new JPanel();
+        summaryPanel.setLayout(new BoxLayout(summaryPanel, BoxLayout.Y_AXIS));
+        summaryPanel.setBackground(Color.WHITE);
+        summaryPanel.setBorder(new CompoundBorder(
+                new LineBorder(Color.LIGHT_GRAY, 1),
+                new EmptyBorder(20, 20, 20, 20)
+        ));
+
+        JLabel totalLbl = new JLabel("Total Topics: 0");
+        JLabel doneLbl = new JLabel("Completed: 0");
+        JLabel remLbl = new JLabel("Remaining: 0");
+        JLabel percLbl = new JLabel("Completion: 0%");
+
+        Font lblFont = new Font("Segoe UI", Font.PLAIN, 16);
+        for (JLabel lbl : List.of(totalLbl, doneLbl, remLbl, percLbl)) {
+            lbl.setFont(lblFont);
+            lbl.setBorder(new EmptyBorder(10, 0, 10, 0));
+            summaryPanel.add(lbl);
+        }
+
+        centerStats.add(piePanel);
+        centerStats.add(summaryPanel);
+        statsPanel.add(centerStats, BorderLayout.CENTER);
+
+        // ---- Add Tabs ----
         tabs.add("Generate", genPanel);
         tabs.add("View Plan", viewPanel);
         tabs.add("Edit Syllabus", editPanel);
         tabs.add("Progress Tracker", progressPanel);
+        tabs.add("Statistics Dashboard", statsPanel);
 
         content.add(tabs, BorderLayout.CENTER);
         f.add(content);
         f.setVisible(true);
 
         // ---- EVENT LISTENERS ----
+
+        selectBtn.addActionListener(e -> {
+            int idx = syllabusList.getSelectedIndex();
+            if (idx >= 0) {
+                Subtopic s = listModel.getElementAt(idx);
+                topicField.setText(s.topic);
+                prBox.setSelectedItem(s.priority);
+            } else msg(f, "Please select a topic first.");
+        });
+
+        addBtn.addActionListener(e -> {
+            String topic = topicField.getText().trim();
+            String pr = (String) prBox.getSelectedItem();
+            if (topic.isEmpty()) { msg(f, "Topic cannot be empty."); return; }
+            Subtopic s = new Subtopic(topic, pr);
+            u.syllabus.add(s);
+            listModel.addElement(s);
+            topicField.setText("");
+            prBox.setSelectedIndex(1);
+            msg(f, "Topic added successfully!");
+            piePanel.repaint();
+        });
+
+        delBtn.addActionListener(e -> {
+            int idx = syllabusList.getSelectedIndex();
+            if (idx >= 0) {
+                Subtopic s = listModel.getElementAt(idx);
+                int confirm = JOptionPane.showConfirmDialog(f, "Delete topic: " + s.topic + "?", "Confirm", JOptionPane.YES_NO_OPTION);
+                if (confirm == JOptionPane.YES_OPTION) {
+                    u.syllabus.remove(s);
+                    listModel.remove(idx);
+                    msg(f, "Topic deleted successfully!");
+                    piePanel.repaint();
+                }
+            } else msg(f, "Please select a topic to delete.");
+        });
+
+        updateBtn.addActionListener(e -> {
+            int idx = syllabusList.getSelectedIndex();
+            if (idx >= 0) {
+                Subtopic s = listModel.getElementAt(idx);
+                String newTopic = topicField.getText().trim();
+                String newPr = (String) prBox.getSelectedItem();
+                if (newTopic.isEmpty()) { msg(f, "Topic cannot be empty."); return; }
+                s.topic = newTopic;
+                s.priority = newPr;
+                syllabusList.repaint();
+                msg(f, "Topic updated successfully!");
+                piePanel.repaint();
+            } else msg(f, "Please select a topic to update.");
+        });
+
         genBtn.addActionListener(e -> {
-            if (u.syllabus.isEmpty()) {
-                msg(f, "Please add syllabus first.");
-                return;
-            }
+            if (u.syllabus.isEmpty()) { msg(f, "Please add syllabus first."); return; }
             int wks = (Integer) weekSpinner.getValue();
             String cap = (String) capBox.getSelectedItem();
             u.lastPlan = StudyPlanGenerator.gen(u.syllabus, wks, cap);
@@ -607,117 +684,94 @@ progressPanel.add(bottomProgress, BorderLayout.SOUTH);
         });
 
         saveBtn.addActionListener(e -> {
-            if (u.lastPlan == null) {
-                msg(f, "No plan to save!");
-                return;
-            }
+            if (u.lastPlan == null) { msg(f, "No plan to save!"); return; }
             u.savePlanToDatabase();
             msg(f, "Plan saved to database successfully!");
         });
 
-    
-
         rebalanceBtn.addActionListener(e -> {
-            if (u.lastPlan == null) {
-                msg(f, "No plan to rebalance. Please generate one first.");
-                return;
-            }
+            if (u.lastPlan == null) { msg(f, "No plan to rebalance. Please generate one first."); return; }
             String cap = (String) capBox.getSelectedItem();
-                // ✅ Decrease total weeks by 1 before regenerating
-    int newWeeks = Math.max(1, u.lastPlan.weeks.size() - 1);
-
-    // ✅ Generate new plan with (n - 1) weeks
-    u.lastPlan = StudyPlanGenerator.gen(u.syllabus, newWeeks, cap);
-
+            int newWeeks = Math.max(1, u.lastPlan.weeks.size() - 1);
+            u.lastPlan = StudyPlanGenerator.gen(u.syllabus, newWeeks, cap);
             StudyPlanGenerator.rebalancePlan(u, cap);
-            buildProgressUI(u, weeksContainer, totalProgressBar);
-            msg(f, "Plan rebalanced! Incomplete topics redistributed across weeks.");
+            buildProgressUI(u, weeksContainer, null);
+            msg(f, "Plan rebalanced! Incomplete topics redistributed.");
         });
 
-        // ---- Tab Switch Behavior ----
         tabs.addChangeListener(ev -> {
-            if (tabs.getSelectedIndex() == 1 && u.lastPlan != null) {
+            String titleSelected = tabs.getTitleAt(tabs.getSelectedIndex());
+            if (titleSelected.equals("View Plan") && u.lastPlan != null)
                 viewArea.setText(ViewGUI.render(u.lastPlan));
-            } else if (tabs.getSelectedIndex() == 2) {
+            else if (titleSelected.equals("Edit Syllabus")) {
                 listModel.clear();
                 for (Subtopic s : u.syllabus) listModel.addElement(s);
-            } else if (tabs.getSelectedIndex() == 3) {
-                buildProgressUI(u, weeksContainer, totalProgressBar);
+            } else if (titleSelected.equals("Progress Tracker"))
+                buildProgressUI(u, weeksContainer, null);
+            else if (titleSelected.equals("Statistics Dashboard")) {
+                int total = u.syllabus.size();
+                long done = u.syllabus.stream().filter(s -> s.completed).count();
+                long remaining = total - done;
+                int percent = total == 0 ? 0 : (int) ((done * 100.0) / total);
+
+                totalLbl.setText("Total Topics: " + total);
+                doneLbl.setText("Completed: " + done);
+                remLbl.setText("Remaining: " + remaining);
+                percLbl.setText("Completion: " + percent + "%");
+
+                piePanel.repaint();
             }
         });
     }
 
-    // ====================== HELPER METHODS ======================
-static void buildProgressUI(User u, JPanel container, JProgressBar totalProgressBar) {
-    container.removeAll();
-    if (u.lastPlan == null) {
-        container.add(new JLabel("No study plan generated yet."));
+    // ---- Helper Methods ----
+    static void buildProgressUI(User u, JPanel container, JProgressBar bar) {
+        container.removeAll();
+        if (u.lastPlan == null) {
+            container.add(new JLabel("No study plan generated yet."));
+            container.revalidate();
+            container.repaint();
+            return;
+        }
+
+        boolean prevWeeksComplete = true;
+        for (int w = 0; w < u.lastPlan.weeks.size(); w++) {
+            Week wk = u.lastPlan.weeks.get(w);
+            JPanel wp = new JPanel();
+            wp.setLayout(new BoxLayout(wp, BoxLayout.Y_AXIS));
+            wp.setBorder(BorderFactory.createTitledBorder("Week " + (w + 1)));
+            wp.setBackground(Color.white);
+
+            boolean weekComplete = true;
+            boolean prevTaskComplete = true;
+
+            for (Entry e : wk.entries) {
+                JCheckBox cb = new JCheckBox(e.topic + " (" + e.priority + ")");
+                Subtopic s = findSubtopicByTopic(u, e.topic);
+                if (s != null) cb.setSelected(s.completed);
+                cb.setEnabled(prevWeeksComplete && prevTaskComplete);
+                cb.addActionListener(ev -> {
+                    if (s != null) s.completed = cb.isSelected();
+                    buildProgressUI(u, container, null);
+                });
+                wp.add(cb);
+                if (s == null || !s.completed) {
+                    prevTaskComplete = false;
+                    weekComplete = false;
+                }
+            }
+
+            if (!weekComplete) prevWeeksComplete = false;
+            container.add(Box.createRigidArea(new Dimension(0, 10)));
+            container.add(wp);
+        }
+
         container.revalidate();
         container.repaint();
-        return;
     }
-
-    int total = 0, done = 0;
-    boolean prevWeeksComplete = true; // ✅ Used to lock future weeks
-
-    for (int w = 0; w < u.lastPlan.weeks.size(); w++) {
-        Week wk = u.lastPlan.weeks.get(w);
-        JPanel wp = new JPanel();
-        wp.setLayout(new BoxLayout(wp, BoxLayout.Y_AXIS));
-        wp.setBorder(BorderFactory.createTitledBorder("Week " + (w + 1)));
-        wp.setBackground(Color.white);
-
-        boolean weekComplete = true;
-
-        // ✅ Sequential restriction within each week
-        boolean previousTaskComplete = true;
-
-        for (Entry e : wk.entries) {
-            String formattedTime = ViewGUI.formatHours(e.hours);
-            JCheckBox cb = new JCheckBox(e.topic + " (" + e.priority + ", " + formattedTime + ")");
-            Subtopic s = findSubtopicByTopic(u, e.topic);
-            if (s != null) cb.setSelected(s.completed);
-
-            // ✅ Enable only if previous weeks are complete and previous tasks in week are complete
-            cb.setEnabled(prevWeeksComplete && previousTaskComplete);
-
-            cb.addActionListener(ev -> {
-                if (s != null) s.completed = cb.isSelected();
-                buildProgressUI(u, container, totalProgressBar);
-            });
-
-            wp.add(cb);
-            total++;
-
-            if (s != null && s.completed) {
-                done++;
-            } else {
-                previousTaskComplete = false;
-                weekComplete = false;
-            }
-        }
-
-        // ✅ Lock future weeks until this week is fully complete
-        if (!weekComplete) prevWeeksComplete = false;
-
-        container.add(Box.createRigidArea(new Dimension(0, 10)));
-        container.add(wp);
-    }
-
-    int percent = total == 0 ? 0 : (done * 100 / total);
-    totalProgressBar.setValue(percent);
-    totalProgressBar.setString(percent + "% Complete");
-
-    container.revalidate();
-    container.repaint();
-}
-
-
 
     static Subtopic findSubtopicByTopic(User u, String topic) {
-        for (Subtopic s : u.syllabus) {
-            if (s.topic.equalsIgnoreCase(topic)) return s;
-        }
+        for (Subtopic s : u.syllabus) if (s.topic.equalsIgnoreCase(topic)) return s;
         return null;
     }
 
@@ -781,6 +835,3 @@ static void buildProgressUI(User u, JPanel container, JProgressBar totalProgress
     }
 }
 }
-
-
-
